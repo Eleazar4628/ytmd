@@ -13,4 +13,4 @@ Un script automatizado para descargar música de YouTube Music con la mejor cali
 Asegúrate de tener Python instalado y ejecuta el siguiente comando en tu terminal (CMD, PowerShell o Termux):
 
 ```bash
-pip install git+[https://github.com/Eleazar4628/ytmd.git](https://github.com/Eleazar4628/ytmd.git)
+pip install git+https://github.com/Eleazar4628/ytmd.git
