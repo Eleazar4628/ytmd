@@ -1,8 +1,8 @@
 from setuptools import setup
 
 setup(
-    name="ymd",
-    version="1.0.0",
+    name="ytmd",
+    version="1.0",
     py_modules=["ytmd"],
     install_requires=[
         "yt-dlp",
@@ -10,7 +10,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'ymd=ytmd:main',
+            'ytmd=ytmd:main',
         ],
     },
 )

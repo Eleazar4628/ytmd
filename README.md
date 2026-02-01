@@ -1,8 +1,16 @@
-# 🎵 ymd (YouTube Music Downloader)
+# 🎵 ytmd (YouTube Music Downloader)
 
-A fast, lightweight, and professional CLI tool to download music from YouTube Music with high-quality metadata and square covers.
+Un script automatizado para descargar música de YouTube Music con la mejor calidad disponible, organizada automáticamente por carpetas de Artista y Álbum.
 
-## 🚀 Installation
+## ✨ Características
+- **Auto-actualización:** El script verifica si hay cambios en GitHub y se actualiza solo.
+- **Auto-instalación de dependencias:** Detecta si falta FFmpeg e intenta instalarlo (vía Winget en Windows o Pkg en Termux).
+- **Organización inteligente:** Crea carpetas siguiendo el patrón `Música/Artista/Álbum/Canción.mp3`.
+- **Metadatos completos:** Incluye carátula (convertida a JPG), artista, álbum y títulos oficiales.
+
+## 📥 Instalación
+
+Asegúrate de tener Python instalado y ejecuta el siguiente comando en tu terminal (CMD, PowerShell o Termux):
 
 ```bash
-pip install git+https://github.com/Eleazar4628/ytmd.git
+pip install git+[https://github.com/Eleazar4628/ytmd.git](https://github.com/Eleazar4628/ytmd.git)
