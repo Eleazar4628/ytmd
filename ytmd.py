@@ -72,13 +72,8 @@ def main():
 
     command = [
         "yt-dlp", "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "0",
-        "--add-metadata",
-        "--embed-metadata",
-        "--embed-thumbnail",
-        "--convert-thumbnails", "jpg",
+        "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg",
         "--ppa", "ThumbnailsConvertor:-vf crop=ih:ih",
-        "--parse-metadata", "%(upload_date)s:%(meta_date)s",
-        "--replace-in-metadata", "meta_date", r"(\d{4})(\d{2})(\d{2})", r"\1-\2-\3",
         "--parse-metadata", "artist:%(artist)s",
         "--replace-in-metadata", "artist", r",.*", "",
         "--replace-in-metadata", "artist", r" &.*", "",
