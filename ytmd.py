@@ -4,9 +4,9 @@ import subprocess
 import shutil
 import requests
 
-REPO_URL = "https://github.com/Eleazar4628/ymd.git"
-REPO_API_URL = "https://api.github.com/repos/Eleazar4628/ymd/commits/main"
-VERSION_FILE = os.path.join(os.path.expanduser("~"), ".ymd_version")
+REPO_URL = "https://github.com/Eleazar4628/ytmd.git"
+REPO_API_URL = "https://api.github.com/repos/Eleazar4628/ytmd/commits/main"
+VERSION_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_version")
 
 def run_upgrade():
     print(f"Checking for updates from {REPO_URL}...")
@@ -17,7 +17,7 @@ def run_upgrade():
             subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", f"git+{REPO_URL}"], check=True)
             with open(VERSION_FILE, "w") as f:
                 f.write(latest_sha)
-            print("✅ Successfully upgraded to the latest version.")
+            print("✅ Successfully upgraded to the latest version of ytmd.")
         else:
             print("❌ Could not connect to GitHub to check for updates.")
     except Exception as e:
@@ -31,7 +31,7 @@ def check_for_updates_silently():
             if os.path.exists(VERSION_FILE):
                 with open(VERSION_FILE, "r") as f:
                     if f.read().strip() != latest_sha:
-                        print("💡 A new version is available. Use 'ymd --upgrade' to update.")
+                        print("💡 A new version is available. Use 'ytmd --upgrade' to update.")
     except:
         pass
 
@@ -50,7 +50,8 @@ def check_ffmpeg():
 
 def main():
     if len(sys.argv) < 2:
-        print("\nUsage: ymd <URL> or ymd --upgrade")
+        print("\n🎵 ytmd - YouTube Music Downloader")
+        print("Usage: ytmd <URL> or ytmd --upgrade")
         return
 
     arg = sys.argv[1].lower()
@@ -74,6 +75,8 @@ def main():
         "yt-dlp", "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "0",
         "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg",
         "--ppa", "ThumbnailsConvertor:-vf crop=ih:ih",
+        "--parse-metadata", "upload_date:%(date)s",
+        "--replace-in-metadata", "date", r"(\d{4})(\d{2})(\d{2})", r"\1-\2-\3",
         "--parse-metadata", "artist:%(artist)s",
         "--replace-in-metadata", "artist", r",.*", "",
         "--replace-in-metadata", "artist", r" &.*", "",
