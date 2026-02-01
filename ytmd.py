@@ -4,23 +4,17 @@ import subprocess
 import shutil
 import requests
 
-# Configuración del repositorio
-REPO_URL = "https://github.com/Eleazar4628/ytmd.git"
-REPO_API_URL = "https://api.github.com/repos/Eleazar4628/ytmd/commits/main"
-VERSION_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_version")
+REPO_URL = "https://github.com/Eleazar4628/ymd.git"
+REPO_API_URL = "https://api.github.com/repos/Eleazar4628/ymd/commits/main"
+VERSION_FILE = os.path.join(os.path.expanduser("~"), ".ymd_version")
 
 def run_upgrade():
-    """Ejecuta la actualización del script y actualiza el hash local."""
     print(f"Checking for updates from {REPO_URL}...")
     try:
         response = requests.get(REPO_API_URL, timeout=5)
         if response.status_code == 200:
             latest_sha = response.json()['sha']
-            
-            # Actualizar mediante pip
             subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", f"git+{REPO_URL}"], check=True)
-            
-            # Guardar el nuevo hash tras el éxito
             with open(VERSION_FILE, "w") as f:
                 f.write(latest_sha)
             print("✅ Successfully upgraded to the latest version.")
@@ -30,7 +24,6 @@ def run_upgrade():
         print(f"❌ Upgrade failed: {e}")
 
 def check_for_updates_silently():
-    """Verifica si hay cambios sin interrumpir el flujo principal."""
     try:
         response = requests.get(REPO_API_URL, timeout=2)
         if response.status_code == 200:
@@ -38,7 +31,7 @@ def check_for_updates_silently():
             if os.path.exists(VERSION_FILE):
                 with open(VERSION_FILE, "r") as f:
                     if f.read().strip() != latest_sha:
-                        print("💡 A new version is available. Use 'ytmd --upgrade' to update.")
+                        print("💡 A new version is available. Use 'ymd --upgrade' to update.")
     except:
         pass
 
@@ -57,22 +50,19 @@ def check_ffmpeg():
 
 def main():
     if len(sys.argv) < 2:
-        print("\nUsage: ytmd <URL> or ytmd --upgrade")
+        print("\nUsage: ymd <URL> or ymd --upgrade")
         return
 
-    # Manejo de argumentos profesionales
     arg = sys.argv[1].lower()
     if arg in ["--upgrade", "-u"]:
         run_upgrade()
         return
 
-    # Iniciar flujo de descarga
     check_for_updates_silently()
     check_ffmpeg()
     
     url = sys.argv[1]
 
-    # Rutas dinámicas
     if os.name == 'nt': 
         base_path = os.path.join(os.path.expanduser("~"), "Music")
     else: 
@@ -84,6 +74,9 @@ def main():
         "yt-dlp", "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "0",
         "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg",
         "--ppa", "ThumbnailsConvertor:-vf crop=ih:ih",
+        "--parse-metadata", "artist:%(artist)s",
+        "--replace-in-metadata", "artist", r",.*", "",
+        "--replace-in-metadata", "artist", r" &.*", "",
         "--parse-metadata", "title:%(title)s",
         "--replace-in-metadata", "title", r"(?i)\s*([\(\[][^\]\)]*(video|audio|lyrics|official|video oficial|hd)[^\]\)]*[\)\]])", "",
         "-o", output_template, url
