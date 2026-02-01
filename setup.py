@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name="ytmd",
-    version="1.1",
+    version="1.2.0",
     py_modules=["ytmd"],
     install_requires=[
         "yt-dlp",
