@@ -5,4 +5,5 @@ A fast, lightweight, and professional CLI tool to download music from YouTube Mu
 ## 🚀 Installation
 
 ```bash
-pip install git+[https://github.com/Eleazar4628/ytmd.git](https://github.com/Eleazar4628/ytmd.git)
+
+pip install git+https://github.com/Eleazar4628/ytmd.git
