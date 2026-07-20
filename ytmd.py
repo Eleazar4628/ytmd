@@ -1,39 +1,60 @@
 import os
 import sys
+import time
 import subprocess
 import shutil
 import requests
+from urllib.parse import urlparse, parse_qs
 
 REPO_URL = "https://github.com/Eleazar4628/ytmd.git"
 REPO_API_URL = "https://api.github.com/repos/Eleazar4628/ytmd/commits/main"
 VERSION_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_version")
 
+
+def get_latest_sha(timeout=5, retries=2, silent=False):
+    """Consulta el SHA del último commit en GitHub, con reintentos y manejo de rate-limit."""
+    for attempt in range(retries + 1):
+        try:
+            response = requests.get(REPO_API_URL, timeout=timeout)
+            if response.status_code == 200:
+                return response.json()['sha']
+            if response.status_code == 403 and response.headers.get('X-RateLimit-Remaining') == '0':
+                if not silent:
+                    print("⚠️  Límite de solicitudes a GitHub alcanzado. Probá de nuevo más tarde.")
+                return None
+            # otro error HTTP: reintentar si quedan intentos
+        except requests.exceptions.RequestException:
+            pass
+
+        if attempt < retries:
+            time.sleep(1.5 * (attempt + 1))
+
+    if not silent:
+        print("No se pudo conectar a GitHub para verificar actualizaciones.")
+    return None
+
+
 def run_upgrade():
     print(f"Verificando actualizaciones en {REPO_URL}...")
+    latest_sha = get_latest_sha(silent=False)
+    if latest_sha is None:
+        return
     try:
-        response = requests.get(REPO_API_URL, timeout=5)
-        if response.status_code == 200:
-            latest_sha = response.json()['sha']
-            subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", f"git+{REPO_URL}"], check=True)
-            with open(VERSION_FILE, "w") as f:
-                f.write(latest_sha)
-            print("Actualización completada.")
-        else:
-            print("No se pudo conectar a GitHub para verificar actualizaciones.")
-    except Exception as e:
+        subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", f"git+{REPO_URL}"], check=True)
+        with open(VERSION_FILE, "w") as f:
+            f.write(latest_sha)
+        print("Actualización completada.")
+    except subprocess.CalledProcessError as e:
         print(f"Error al actualizar: {e}")
 
+
 def check_for_updates_silently():
-    try:
-        response = requests.get(REPO_API_URL, timeout=2)
-        if response.status_code == 200:
-            latest_sha = response.json()['sha']
-            if os.path.exists(VERSION_FILE):
-                with open(VERSION_FILE, "r") as f:
-                    if f.read().strip() != latest_sha:
-                        print("Nueva versión disponible. Usa 'ytmd --upgrade' para actualizar.")
-    except:
-        pass
+    latest_sha = get_latest_sha(timeout=2, retries=0, silent=True)
+    if latest_sha and os.path.exists(VERSION_FILE):
+        with open(VERSION_FILE, "r") as f:
+            if f.read().strip() != latest_sha:
+                print("Nueva versión disponible. Usa 'ytmd --upgrade' para actualizar.")
+
 
 def get_music_folder():
     if os.name == 'nt':
@@ -79,18 +100,72 @@ def get_music_folder():
     else:
         return "/sdcard/Music" if os.path.exists("/sdcard") else os.path.expanduser("~/storage/music")
 
-def check_ffmpeg():
+
+def check_dependencies():
+    """Verifica yt-dlp y ffmpeg. Si falta alguno, muestra el comando para instalarlo y sale."""
+    missing = []
+    if shutil.which("yt-dlp") is None:
+        missing.append("yt-dlp")
     if shutil.which("ffmpeg") is None:
-        print("📦 FFmpeg not found.")
-        choice = input("Install now? (y/n): ").lower()
-        if choice == 'y':
+        missing.append("ffmpeg")
+
+    if not missing:
+        return
+
+    print(f"❌ Falta(n) dependencia(s): {', '.join(missing)}")
+    print("Instalá con:")
+    for dep in missing:
+        if dep == "yt-dlp":
+            print("  pip install -U yt-dlp")
+        else:
             if os.name == 'nt':
-                subprocess.run(["winget", "install", "ffmpeg"], check=True)
+                print("  winget install ffmpeg")
             else:
-                subprocess.run(["pkg", "install", "ffmpeg", "-y"], check=True)
-            print("✅ Installed. Please restart your terminal.")
-            sys.exit(0)
-        sys.exit(1)
+                print("  pkg install ffmpeg -y # Termux")
+    sys.exit(1)
+
+
+def to_music_youtube(url):
+    """Si es un link de youtube.com/youtu.be con un video ID identificable,
+    lo reescribe a music.youtube.com para forzar la versión/metadata de YT Music
+    (evita intros habladas, ediciones de videoclip, etc.)."""
+    try:
+        parsed = urlparse(url)
+        host = parsed.netloc.lower()
+        video_id = None
+
+        if "youtu.be" in host:
+            video_id = parsed.path.strip("/").split("/")[0]
+        elif "youtube.com" in host:
+            qs = parse_qs(parsed.query)
+            if "v" in qs:
+                video_id = qs["v"][0]
+
+        if video_id and len(video_id) == 11:
+            new_url = f"https://music.youtube.com/watch?v={video_id}"
+            if new_url != url:
+                print(f"🎵 Redirigiendo a YT Music: {new_url}")
+            return new_url
+    except Exception:
+        pass
+    return url  # playlist u otro formato: se deja igual
+
+
+def run_download(command):
+    """Ejecuta yt-dlp mostrando el progreso en vivo, y devuelve las líneas de salida."""
+    process = subprocess.Popen(
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, bufsize=1
+    )
+    lines = []
+    for line in process.stdout:
+        print(line, end="")
+        lines.append(line.rstrip("\n"))
+    process.wait()
+    if process.returncode != 0:
+        raise subprocess.CalledProcessError(process.returncode, command)
+    return lines
+
 
 def main():
     if len(sys.argv) < 2:
@@ -104,9 +179,9 @@ def main():
         return
 
     check_for_updates_silently()
-    check_ffmpeg()
-    
-    url = sys.argv[1]
+    check_dependencies()
+
+    url = to_music_youtube(sys.argv[1])
 
     base_path = get_music_folder()
 
@@ -121,6 +196,7 @@ def main():
         "--parse-metadata", "artist:%(artist)s",
         "--replace-in-metadata", "artist", r",.*", "",
         "--replace-in-metadata", "artist", r" &.*", "",
+        "--parse-metadata", "artist:%(meta_album_artist)s",
         "--parse-metadata", "title:%(title)s",
         "--replace-in-metadata", "title", r"(?i)\s*([\(\[][^\]\)]*(video|audio|lyrics|official|video oficial|hd)[^\]\)]*[\)\]])", "",
         "-o", output_template,
@@ -129,21 +205,18 @@ def main():
     ]
 
     try:
-        print(f"Iniciando descarga...")
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
-        print(result.stdout, end="")  # muestra el progreso normal de yt-dlp
+        print("Iniciando descarga...")
+        lines = run_download(command)
 
-        # La última línea no vacía es la ruta impresa por --print after_move:filepath
-        lines = [l for l in result.stdout.strip().splitlines() if l.strip()]
-        final_path = lines[-1] if lines else base_path
+        non_empty = [l for l in lines if l.strip()]
+        final_path = non_empty[-1] if non_empty else base_path
 
-        print(f"\nDescarga completada: {final_path}")
+        print(f"\n================================\nDescargado en: {final_path}\n================================")
     except subprocess.CalledProcessError as e:
-        print(e.stdout, end="")
-        print(e.stderr, end="")
         print(f"\nError: {e}")
     except Exception as e:
         print(f"\nError: {e}")
+
 
 if __name__ == "__main__":
     main()
