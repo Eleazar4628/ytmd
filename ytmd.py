@@ -20,7 +20,7 @@ def get_latest_sha(timeout=5, retries=2, silent=False):
                 return response.json()['sha']
             if response.status_code == 403 and response.headers.get('X-RateLimit-Remaining') == '0':
                 if not silent:
-                    print("⚠️  Límite de solicitudes a GitHub alcanzado. Probá de nuevo más tarde.")
+                    print("\nLímite de solicitudes a GitHub alcanzado. Probá de nuevo más tarde.")
                 return None
             # otro error HTTP: reintentar si quedan intentos
         except requests.exceptions.RequestException:
@@ -102,7 +102,6 @@ def get_music_folder():
 
 
 def check_dependencies():
-    """Verifica yt-dlp y ffmpeg. Si falta alguno, muestra el comando para instalarlo y sale."""
     missing = []
     if shutil.which("yt-dlp") is None:
         missing.append("yt-dlp")
@@ -112,7 +111,7 @@ def check_dependencies():
     if not missing:
         return
 
-    print(f"❌ Falta(n) dependencia(s): {', '.join(missing)}")
+    print(f"Falta(n) dependencia(s): {', '.join(missing)}")
     print("Instalá con:")
     for dep in missing:
         if dep == "yt-dlp":
@@ -127,7 +126,7 @@ def check_dependencies():
 
 def to_music_youtube(url):
     """Si es un link de youtube.com/youtu.be con un video ID identificable,
-    lo reescribe a music.youtube.com para forzar la versión/metadata de YT Music
+    lo reescribe a music.youtube.com para forzar la versión y metadata de YT Music
     (evita intros habladas, ediciones de videoclip, etc.)."""
     try:
         parsed = urlparse(url)
@@ -144,11 +143,11 @@ def to_music_youtube(url):
         if video_id and len(video_id) == 11:
             new_url = f"https://music.youtube.com/watch?v={video_id}"
             if new_url != url:
-                print(f"🎵 Redirigiendo a YT Music: {new_url}")
+                print(f"Redirigiendo a YT Music: {new_url}")
             return new_url
     except Exception:
         pass
-    return url  # playlist u otro formato: se deja igual
+    return url
 
 
 def run_download(command):
@@ -188,8 +187,8 @@ def main():
     output_template = os.path.join(base_path, "%(artist,uploader)s", "%(album,playlist_title,Unknown_Album)s", "%(title)s.%(ext)s")
 
     command = [
-        "yt-dlp", "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "0",
-        "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg",
+        "yt-dlp", "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "--force-overwrites",
+        "0", "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg",
         "--ppa", "ThumbnailsConvertor:-vf crop=ih:ih",
         "--parse-metadata", "upload_date:%(date)s",
         "--replace-in-metadata", "date", r"(\d{4})(\d{2})(\d{2})", r"\1-\2-\3",
@@ -205,13 +204,13 @@ def main():
     ]
 
     try:
-        print("Iniciando descarga...")
+        print("\nIniciando descarga...\n")
         lines = run_download(command)
 
         non_empty = [l for l in lines if l.strip()]
         final_path = non_empty[-1] if non_empty else base_path
 
-        print(f"\n================================\nDescargado en: {final_path}\n================================")
+        print(f"\n========================================\nDescargado en: {final_path}\n========================================\n")
     except subprocess.CalledProcessError as e:
         print(f"\nError: {e}")
     except Exception as e:
