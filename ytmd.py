@@ -187,8 +187,8 @@ def main():
     output_template = os.path.join(base_path, "%(artist,uploader)s", "%(album,playlist_title,Unknown_Album)s", "%(title)s.%(ext)s")
 
     command = [
-        "yt-dlp", "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "--force-overwrites",
-        "0", "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg",
+        "yt-dlp", "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "--force-overwrites", "0",
+        "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg",
         "--ppa", "ThumbnailsConvertor:-vf crop=ih:ih",
         "--parse-metadata", "upload_date:%(date)s",
         "--replace-in-metadata", "date", r"(\d{4})(\d{2})(\d{2})", r"\1-\2-\3",
