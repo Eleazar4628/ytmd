@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name="ytmd",
-    version="1.4.1",
+    version="1.4.2",
     py_modules=["ytmd"],
     python_requires=">=3.7",
     install_requires=[
