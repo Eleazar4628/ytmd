@@ -25,10 +25,8 @@ def get_latest_sha(timeout=5, retries=2, silent=False):
             # otro error HTTP: reintentar si quedan intentos
         except requests.exceptions.RequestException:
             pass
-
         if attempt < retries:
             time.sleep(1.5 * (attempt + 1))
-
     if not silent:
         print("No se pudo conectar a GitHub para verificar actualizaciones.")
     return None
@@ -56,61 +54,14 @@ def check_for_updates_silently():
                 print("Nueva versión disponible. Usa 'ytmd --upgrade' para actualizar.")
 
 
-def get_music_folder():
-    if os.name == 'nt':
-        try:
-            import ctypes
-            from ctypes import windll, wintypes
-            from uuid import UUID
-
-            class GUID(ctypes.Structure):
-                _fields_ = [
-                    ("Data1", wintypes.DWORD),
-                    ("Data2", wintypes.WORD),
-                    ("Data3", wintypes.WORD),
-                    ("Data4", ctypes.c_byte * 8)
-                ]
-
-                def __init__(self, uuid_str):
-                    u = UUID(uuid_str)
-                    ctypes.Structure.__init__(self)
-                    self.Data1, self.Data2, self.Data3, self.Data4[0], self.Data4[1], rest = u.fields
-                    for i in range(2, 8):
-                        self.Data4[i] = rest >> (8 * (5 - (i - 2))) & 0xff
-
-            FOLDERID_Music = GUID("4bd8d571-6d19-48d3-be97-422220080e43")
-
-            SHGetKnownFolderPath = windll.shell32.SHGetKnownFolderPath
-            SHGetKnownFolderPath.argtypes = [
-                ctypes.POINTER(GUID), wintypes.DWORD, wintypes.HANDLE,
-                ctypes.POINTER(ctypes.c_wchar_p)
-            ]
-
-            path_ptr = ctypes.c_wchar_p()
-            result = SHGetKnownFolderPath(ctypes.byref(FOLDERID_Music), 0, None, ctypes.byref(path_ptr))
-            if result == 0:
-                path = path_ptr.value
-                ctypes.windll.ole32.CoTaskMemFree(path_ptr)
-                if path and os.path.isdir(path):
-                    return path
-        except Exception:
-            pass
-        # Fallback si algo falla con la API nativa
-        return os.path.join(os.path.expanduser("~"), "Music")
-    else:
-        return "/sdcard/Music" if os.path.exists("/sdcard") else os.path.expanduser("~/storage/music")
-
-
 def check_dependencies():
     missing = []
     if shutil.which("yt-dlp") is None:
         missing.append("yt-dlp")
     if shutil.which("ffmpeg") is None:
         missing.append("ffmpeg")
-
     if not missing:
         return
-
     print(f"Falta(n) dependencia(s): {', '.join(missing)}")
     print("Instalá con:")
     for dep in missing:
@@ -120,7 +71,7 @@ def check_dependencies():
             if os.name == 'nt':
                 print("  winget install ffmpeg")
             else:
-                print("  pkg install ffmpeg -y # Termux")
+                print("  pkg install ffmpeg -y  # Termux")
     sys.exit(1)
 
 
@@ -132,38 +83,33 @@ def to_music_youtube(url):
         parsed = urlparse(url)
         host = parsed.netloc.lower()
         video_id = None
-
         if "youtu.be" in host:
             video_id = parsed.path.strip("/").split("/")[0]
         elif "youtube.com" in host:
             qs = parse_qs(parsed.query)
             if "v" in qs:
                 video_id = qs["v"][0]
-
         if video_id and len(video_id) == 11:
             new_url = f"https://music.youtube.com/watch?v={video_id}"
             if new_url != url:
                 print(f"Redirigiendo a YT Music: {new_url}")
-            return new_url
+                return new_url
     except Exception:
         pass
     return url
 
 
 def run_download(command):
-    """Ejecuta yt-dlp mostrando el progreso en vivo, y devuelve las líneas de salida."""
+    """Ejecuta yt-dlp mostrando el progreso en vivo."""
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1
     )
-    lines = []
     for line in process.stdout:
         print(line, end="")
-        lines.append(line.rstrip("\n"))
     process.wait()
     if process.returncode != 0:
         raise subprocess.CalledProcessError(process.returncode, command)
-    return lines
 
 
 def main():
@@ -182,12 +128,11 @@ def main():
 
     url = to_music_youtube(sys.argv[1])
 
-    base_path = get_music_folder()
-
-    output_template = os.path.join(base_path, "%(artist,uploader)s", "%(album,playlist_title,Unknown_Album)s", "%(title)s.%(ext)s")
+    # La ruta de descarga queda a cargo de yt-dlp (relativa al directorio actual)
+    output_template = os.path.join("%(artist,uploader)s", "%(album,playlist_title,Unknown_Album)s", "%(title)s.%(ext)s")
 
     command = [
-        "yt-dlp", "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "0", "--force-overwrites",
+        "yt-dlp", "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "--force-overwrites", "0",
         "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg",
         "--ppa", "ThumbnailsConvertor:-vf crop=ih:ih",
         "--parse-metadata", "upload_date:%(date)s",
@@ -198,19 +143,15 @@ def main():
         "--parse-metadata", "artist:%(meta_album_artist)s",
         "--parse-metadata", "title:%(title)s",
         "--replace-in-metadata", "title", r"(?i)\s*([\(\[][^\]\)]*(video|audio|lyrics|official|video oficial|hd)[^\]\)]*[\)\]])", "",
+        "--parse-metadata", ":(?P<meta_comment>)",
         "-o", output_template,
-        "--print", "after_move:filepath",
         url
     ]
 
     try:
         print("\nIniciando descarga...\n")
-        lines = run_download(command)
-
-        non_empty = [l for l in lines if l.strip()]
-        final_path = non_empty[-1] if non_empty else base_path
-
-        print(f"\n========================================\nDescargado en: {final_path}\n========================================\n")
+        run_download(command)
+        print("\n========================================\nDescarga completa\n========================================\n")
     except subprocess.CalledProcessError as e:
         print(f"\nError: {e}")
     except Exception as e:
