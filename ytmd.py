@@ -154,7 +154,7 @@ def main():
     try:
         print("\nIniciando descarga...\n")
         run_download(command)
-        print(f"\n========================================\n{Fore.GREEN}Descarga completa{Style.RESET_ALL}\n========================================\n")
+        print(f"\n{Fore.GREEN}===============================\n       Descarga completa\n==============================={Style.RESET_ALL}\n")
     except subprocess.CalledProcessError as e:
         print(f"\nError: {e}")
     except Exception as e:
