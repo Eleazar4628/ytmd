@@ -57,6 +57,51 @@ def check_for_updates_silently():
                 print("Nueva versión disponible. Usa 'ytmd --upgrade' para actualizar.")
 
 
+def get_music_folder():
+    """Devuelve la carpeta 'Música' real del sistema (respeta si el usuario la
+    movió de ubicación en Windows, vía la API nativa de carpetas conocidas)."""
+    if os.name == 'nt':
+        try:
+            import ctypes
+            from ctypes import windll, wintypes
+            from uuid import UUID
+
+            class GUID(ctypes.Structure):
+                _fields_ = [
+                    ("Data1", wintypes.DWORD),
+                    ("Data2", wintypes.WORD),
+                    ("Data3", wintypes.WORD),
+                    ("Data4", ctypes.c_byte * 8)
+                ]
+
+                def __init__(self, uuid_str):
+                    u = UUID(uuid_str)
+                    ctypes.Structure.__init__(self)
+                    self.Data1, self.Data2, self.Data3, self.Data4[0], self.Data4[1], rest = u.fields
+                    for i in range(2, 8):
+                        self.Data4[i] = rest >> (8 * (5 - (i - 2))) & 0xff
+
+            FOLDERID_Music = GUID("4bd8d571-6d19-48d3-be97-422220080e43")
+            SHGetKnownFolderPath = windll.shell32.SHGetKnownFolderPath
+            SHGetKnownFolderPath.argtypes = [
+                ctypes.POINTER(GUID), wintypes.DWORD, wintypes.HANDLE,
+                ctypes.POINTER(ctypes.c_wchar_p)
+            ]
+            path_ptr = ctypes.c_wchar_p()
+            result = SHGetKnownFolderPath(ctypes.byref(FOLDERID_Music), 0, None, ctypes.byref(path_ptr))
+            if result == 0:
+                path = path_ptr.value
+                ctypes.windll.ole32.CoTaskMemFree(path_ptr)
+                if path and os.path.isdir(path):
+                    return path
+        except Exception:
+            pass
+        # Fallback si algo falla con la API nativa
+        return os.path.join(os.path.expanduser("~"), "Music")
+    else:
+        return "/sdcard/Music" if os.path.exists("/sdcard") else os.path.expanduser("~/storage/music")
+
+
 def check_dependencies():
     missing = []
     if shutil.which("yt-dlp") is None:
@@ -131,8 +176,8 @@ def main():
 
     url = to_music_youtube(sys.argv[1])
 
-    # La ruta de descarga queda a cargo de yt-dlp (relativa al directorio actual)
-    output_template = os.path.join("%(artist,uploader)s", "%(album,playlist_title,Unknown_Album)s", "%(title)s.%(ext)s")
+    base_path = get_music_folder()
+    output_template = os.path.join(base_path, "%(artist,uploader)s", "%(album,playlist_title,Unknown_Album)s", "%(title)s.%(ext)s")
 
     command = [
         "yt-dlp", "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "0", "--force-overwrites",
