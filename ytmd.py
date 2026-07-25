@@ -146,17 +146,16 @@ def main():
         "--ppa", "ThumbnailsConvertor:-vf crop=ih:ih",
         "--parse-metadata", "upload_date:%(date)s",
         "--replace-in-metadata", "date", r"(\d{4})(\d{2})(\d{2})", r"\1-\2-\3",
-        "--parse-metadata", "artist:%(artist)s",
+        "--parse-metadata", "%(artist,uploader|Unknown_Artist)s:(?P<artist>.+)",
         "--replace-in-metadata", "artist", r",.*", "",
         "--replace-in-metadata", "artist", r" &.*", "",
-        "--parse-metadata", "artist:%(meta_album_artist)s",
+        "--parse-metadata", "%(artist,uploader|Unknown_Artist)s:(?P<meta_album_artist>.+)",
         "--parse-metadata", "title:%(title)s",
         "--replace-in-metadata", "title", r"(?i)\s*([\(\[][^\]\)]*(video|audio|lyrics|official|video oficial|hd)[^\]\)]*[\)\]])", "",
         "--parse-metadata", ":(?P<meta_comment>)",
         "-o", output_template,
         url
-    ]
-
+]
     try:
         print("\nIniciando descarga...\n")
         run_download(command)
