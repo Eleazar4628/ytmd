@@ -131,14 +131,8 @@ def main():
 
     url = to_music_youtube(sys.argv[1])
 
-    # La ruta de descarga queda a cargo de yt-dlp (relativa al directorio actual).
-    # Se usa "|" (no ",") para el último elemento de cada campo, que es el
-    # texto literal de respaldo si ningún campo previo resuelve.
-    output_template = os.path.join(
-        "%(artist,uploader|Unknown_Artist)s",
-        "%(album,playlist_title|Unknown_Album)s",
-        "%(title)s.%(ext)s"
-    )
+    # La ruta de descarga queda a cargo de yt-dlp (relativa al directorio actual)
+    output_template = os.path.join("%(artist,uploader)s", "%(album,playlist_title,Unknown_Album)s", "%(title)s.%(ext)s")
 
     command = [
         "yt-dlp", "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "0", "--force-overwrites",
@@ -146,16 +140,17 @@ def main():
         "--ppa", "ThumbnailsConvertor:-vf crop=ih:ih",
         "--parse-metadata", "upload_date:%(date)s",
         "--replace-in-metadata", "date", r"(\d{4})(\d{2})(\d{2})", r"\1-\2-\3",
-        "--parse-metadata", "%(artist,uploader|Unknown_Artist)s:(?P<artist>.+)",
+        "--parse-metadata", "artist:%(artist)s",
         "--replace-in-metadata", "artist", r",.*", "",
         "--replace-in-metadata", "artist", r" &.*", "",
-        "--parse-metadata", "%(artist,uploader|Unknown_Artist)s:(?P<meta_album_artist>.+)",
+        "--parse-metadata", "artist:%(meta_album_artist)s",
         "--parse-metadata", "title:%(title)s",
         "--replace-in-metadata", "title", r"(?i)\s*([\(\[][^\]\)]*(video|audio|lyrics|official|video oficial|hd)[^\]\)]*[\)\]])", "",
         "--parse-metadata", ":(?P<meta_comment>)",
         "-o", output_template,
         url
-]
+    ]
+
     try:
         print("\nIniciando descarga...\n")
         run_download(command)
