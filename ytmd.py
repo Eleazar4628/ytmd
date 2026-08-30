@@ -12,6 +12,8 @@ init()
 REPO_URL = "https://github.com/Eleazar4628/ytmd.git"
 REPO_API_URL = "https://api.github.com/repos/Eleazar4628/ytmd/commits/main"
 VERSION_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_version")
+YTDLP_CHECK_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_ytdlp_last_check")
+YTDLP_CHECK_INTERVAL = 60 * 60 * 24  # 1 día, en segundos
 
 
 def get_latest_sha(timeout=5, retries=2, silent=False):
@@ -55,6 +57,29 @@ def check_for_updates_silently():
         with open(VERSION_FILE, "r") as f:
             if f.read().strip() != latest_sha:
                 print("Nueva versión disponible. Usa 'ytmd --upgrade' para actualizar.")
+
+
+def update_yt_dlp_if_needed():
+    """Actualiza yt-dlp vía pip, como máximo una vez cada YTDLP_CHECK_INTERVAL.
+    Si falla (sin internet, etc.) no rompe el script: sigue con la versión instalada."""
+    now = time.time()
+    if os.path.exists(YTDLP_CHECK_FILE):
+        try:
+            last_check = float(open(YTDLP_CHECK_FILE).read().strip())
+            if now - last_check < YTDLP_CHECK_INTERVAL:
+                return
+        except (ValueError, OSError):
+            pass
+
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-U", "yt-dlp"],
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        with open(YTDLP_CHECK_FILE, "w") as f:
+            f.write(str(now))
+    except subprocess.CalledProcessError:
+        pass
 
 
 def get_music_folder():
@@ -172,6 +197,7 @@ def main():
         return
 
     check_for_updates_silently()
+    update_yt_dlp_if_needed()
     check_dependencies()
 
     url = to_music_youtube(sys.argv[1])
@@ -181,7 +207,7 @@ def main():
 
     command = [
         "yt-dlp", "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "0", "--force-overwrites",
-        "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg",
+        "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "png",
         "--ppa", "ThumbnailsConvertor:-vf crop=ih:ih",
         "--parse-metadata", "upload_date:%(date)s",
         "--replace-in-metadata", "date", r"(\d{4})(\d{2})(\d{2})", r"\1-\2-\3",
