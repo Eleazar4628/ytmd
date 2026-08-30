@@ -13,7 +13,7 @@ REPO_URL = "https://github.com/Eleazar4628/ytmd.git"
 REPO_API_URL = "https://api.github.com/repos/Eleazar4628/ytmd/commits/main"
 VERSION_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_version")
 YTDLP_CHECK_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_ytdlp_last_check")
-YTDLP_CHECK_INTERVAL = 60 * 60 * 24  # 1 día, en segundos
+YTDLP_CHECK_INTERVAL = 60 * 60 * 24
 
 
 def get_latest_sha(timeout=5, retries=2, silent=False):
@@ -27,7 +27,6 @@ def get_latest_sha(timeout=5, retries=2, silent=False):
                 if not silent:
                     print("\nLímite de solicitudes a GitHub alcanzado. Probá de nuevo más tarde.")
                 return None
-            # otro error HTTP: reintentar si quedan intentos
         except requests.exceptions.RequestException:
             pass
         if attempt < retries:
@@ -60,8 +59,6 @@ def check_for_updates_silently():
 
 
 def update_yt_dlp_if_needed():
-    """Actualiza yt-dlp vía pip, como máximo una vez cada YTDLP_CHECK_INTERVAL.
-    Si falla (sin internet, etc.) no rompe el script: sigue con la versión instalada."""
     now = time.time()
     if os.path.exists(YTDLP_CHECK_FILE):
         try:
@@ -83,8 +80,6 @@ def update_yt_dlp_if_needed():
 
 
 def get_music_folder():
-    """Devuelve la carpeta 'Música' real del sistema (respeta si el usuario la
-    movió de ubicación en Windows, vía la API nativa de carpetas conocidas)."""
     if os.name == 'nt':
         try:
             import ctypes
@@ -121,7 +116,6 @@ def get_music_folder():
                     return path
         except Exception:
             pass
-        # Fallback si algo falla con la API nativa
         return os.path.join(os.path.expanduser("~"), "Music")
     else:
         return "/sdcard/Music" if os.path.exists("/sdcard") else os.path.expanduser("~/storage/music")
@@ -149,9 +143,6 @@ def check_dependencies():
 
 
 def to_music_youtube(url):
-    """Si es un link de youtube.com/youtu.be con un video ID identificable,
-    lo reescribe a music.youtube.com para forzar la versión y metadata de YT Music
-    (evita intros habladas, ediciones de videoclip, etc.)."""
     try:
         parsed = urlparse(url)
         host = parsed.netloc.lower()
@@ -207,7 +198,7 @@ def main():
 
     command = [
         "yt-dlp", "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "0", "--force-overwrites",
-        "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "png",
+        "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg",
         "--ppa", "ThumbnailsConvertor:-vf crop=ih:ih",
         "--parse-metadata", "upload_date:%(date)s",
         "--replace-in-metadata", "date", r"(\d{4})(\d{2})(\d{2})", r"\1-\2-\3",
