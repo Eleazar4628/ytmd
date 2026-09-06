@@ -5,15 +5,10 @@ import subprocess
 import shutil
 import requests
 from urllib.parse import urlparse, parse_qs
-from colorama import init, Fore, Style
-
-init()
 
 REPO_URL = "https://github.com/Eleazar4628/ytmd.git"
 REPO_API_URL = "https://api.github.com/repos/Eleazar4628/ytmd/commits/main"
 VERSION_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_version")
-YTDLP_CHECK_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_ytdlp_last_check")
-YTDLP_CHECK_INTERVAL = 60 * 60 * 24
 
 
 def get_latest_sha(timeout=5, retries=2, silent=False):
@@ -27,6 +22,7 @@ def get_latest_sha(timeout=5, retries=2, silent=False):
                 if not silent:
                     print("\nLímite de solicitudes a GitHub alcanzado. Probá de nuevo más tarde.")
                 return None
+            # otro error HTTP: reintentar si quedan intentos
         except requests.exceptions.RequestException:
             pass
         if attempt < retries:
@@ -56,27 +52,6 @@ def check_for_updates_silently():
         with open(VERSION_FILE, "r") as f:
             if f.read().strip() != latest_sha:
                 print("Nueva versión disponible. Usa 'ytmd --upgrade' para actualizar.")
-
-
-def update_yt_dlp_if_needed():
-    now = time.time()
-    if os.path.exists(YTDLP_CHECK_FILE):
-        try:
-            last_check = float(open(YTDLP_CHECK_FILE).read().strip())
-            if now - last_check < YTDLP_CHECK_INTERVAL:
-                return
-        except (ValueError, OSError):
-            pass
-
-    try:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-U", "yt-dlp"],
-            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-        with open(YTDLP_CHECK_FILE, "w") as f:
-            f.write(str(now))
-    except subprocess.CalledProcessError:
-        pass
 
 
 def get_music_folder():
@@ -116,6 +91,7 @@ def get_music_folder():
                     return path
         except Exception:
             pass
+        # Fallback si algo falla con la API nativa
         return os.path.join(os.path.expanduser("~"), "Music")
     else:
         return "/sdcard/Music" if os.path.exists("/sdcard") else os.path.expanduser("~/storage/music")
@@ -142,7 +118,18 @@ def check_dependencies():
     sys.exit(1)
 
 
+def clean_url(url):
+    """Limpia espacios y barras finales sobrantes que rompen el parseo de yt-dlp
+    (por ejemplo, URLs de playlist copiadas con un '/' extra al final del query)."""
+    url = url.strip()
+    url = url.rstrip('/')
+    return url
+
+
 def to_music_youtube(url):
+    """Si es un link de youtube.com/youtu.be con un video ID identificable,
+    lo reescribe a music.youtube.com para forzar la versión y metadata de YT Music
+    (evita intros habladas, ediciones de videoclip, etc.)."""
     try:
         parsed = urlparse(url)
         host = parsed.netloc.lower()
@@ -157,23 +144,26 @@ def to_music_youtube(url):
             new_url = f"https://music.youtube.com/watch?v={video_id}"
             if new_url != url:
                 print(f"Redirigiendo a YT Music: {new_url}")
-                return new_url
+            return new_url
     except Exception:
         pass
     return url
 
 
 def run_download(command):
-    """Ejecuta yt-dlp mostrando el progreso en vivo."""
+    """Ejecuta yt-dlp mostrando el progreso en vivo, y devuelve las líneas de salida."""
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1
     )
+    lines = []
     for line in process.stdout:
         print(line, end="")
+        lines.append(line.rstrip("\n"))
     process.wait()
     if process.returncode != 0:
         raise subprocess.CalledProcessError(process.returncode, command)
+    return lines
 
 
 def main():
@@ -188,18 +178,17 @@ def main():
         return
 
     check_for_updates_silently()
-    update_yt_dlp_if_needed()
     check_dependencies()
 
-    url = to_music_youtube(sys.argv[1])
-
+    raw_url = clean_url(sys.argv[1])
+    url = to_music_youtube(raw_url)
     base_path = get_music_folder()
+
     output_template = os.path.join(base_path, "%(artist,uploader)s", "%(album,playlist_title,Unknown_Album)s", "%(title)s.%(ext)s")
 
     command = [
         "yt-dlp", "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "0", "--force-overwrites",
         "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg",
-        "--ppa", "ThumbnailsConvertor:-vf crop=ih:ih",
         "--parse-metadata", "upload_date:%(date)s",
         "--replace-in-metadata", "date", r"(\d{4})(\d{2})(\d{2})", r"\1-\2-\3",
         "--parse-metadata", "artist:%(artist)s",
@@ -208,15 +197,17 @@ def main():
         "--parse-metadata", "artist:%(meta_album_artist)s",
         "--parse-metadata", "title:%(title)s",
         "--replace-in-metadata", "title", r"(?i)\s*([\(\[][^\]\)]*(video|audio|lyrics|official|video oficial|hd)[^\]\)]*[\)\]])", "",
-        "--parse-metadata", ":(?P<meta_comment>)",
         "-o", output_template,
+        "--print", "after_move:filepath",
         url
     ]
 
     try:
         print("\nIniciando descarga...\n")
-        run_download(command)
-        print(f"\n{Fore.GREEN}===============================\n       Descarga completa\n==============================={Style.RESET_ALL}\n")
+        lines = run_download(command)
+        non_empty = [l for l in lines if l.strip()]
+        final_path = non_empty[-1] if non_empty else base_path
+        print(f"\n========================================\nDescargado en: {final_path}\n========================================\n")
     except subprocess.CalledProcessError as e:
         print(f"\nError: {e}")
     except Exception as e:
