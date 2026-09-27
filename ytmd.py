@@ -172,17 +172,50 @@ def to_music_youtube(url):
     return url
 
 
+PATH_MARKER = "___YTMD_FILEPATH___"
+
+
+def open_download_folder(path):
+    """Abre una carpeta en el explorador de archivos del sistema."""
+    try:
+        if os.name == 'nt':
+            os.startfile(path)
+        elif os.path.exists("/sdcard"):  # Termux/Android
+            subprocess.run(["termux-open", path], check=False)
+        elif sys.platform == "darwin":
+            subprocess.run(["open", path], check=False)
+        else:
+            subprocess.run(["xdg-open", path], check=False)
+    except Exception:
+        pass
+
+
 def run_download(command):
-    """Ejecuta yt-dlp mostrando el progreso en vivo."""
+    """Ejecuta yt-dlp mostrando el progreso en vivo.
+    Devuelve la lista de carpetas (sin duplicados) donde quedaron los archivos finales."""
+    output_dirs = []
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1
     )
     for line in process.stdout:
-        print(line, end="")
+        if line.startswith(PATH_MARKER):
+            filepath = line[len(PATH_MARKER):].strip()
+            if filepath:
+                output_dirs.append(os.path.dirname(filepath))
+        else:
+            print(line, end="")
     process.wait()
     if process.returncode != 0:
         raise subprocess.CalledProcessError(process.returncode, command)
+
+    seen = set()
+    unique_dirs = []
+    for d in output_dirs:
+        if d not in seen:
+            seen.add(d)
+            unique_dirs.append(d)
+    return unique_dirs
 
 
 def main():
@@ -208,6 +241,7 @@ def main():
     command = [
         "yt-dlp", "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "0", "--force-overwrites",
         "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg",
+        "--postprocessor-args", "ThumbnailsConvertor:-vf crop=ih:ih",
         "--parse-metadata", "upload_date:%(date)s",
         "--replace-in-metadata", "date", r"(\d{4})(\d{2})(\d{2})", r"\1-\2-\3",
         "--parse-metadata", "artist:%(artist)s",
@@ -217,14 +251,17 @@ def main():
         "--parse-metadata", "title:%(title)s",
         "--replace-in-metadata", "title", r"(?i)\s*([\(\[][^\]\)]*(video|audio|lyrics|official|video oficial|hd)[^\]\)]*[\)\]])", "",
         "--parse-metadata", ":(?P<meta_comment>)",
+        "--print", f"after_move:{PATH_MARKER}%(filepath)s",
         "-o", output_template,
         url
     ]
 
     try:
         print("\nIniciando descarga...\n")
-        run_download(command)
+        output_dirs = run_download(command)
         print(f"\n{Fore.GREEN}===============================\n       Descarga completa\n==============================={Style.RESET_ALL}\n")
+        for folder in output_dirs:
+            open_download_folder(folder)
     except subprocess.CalledProcessError as e:
         print(f"\nError: {e}")
     except Exception as e:
