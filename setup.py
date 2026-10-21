@@ -2,11 +2,11 @@ from setuptools import setup
 
 setup(
     name="ytmd",
-    version="1.7.2",
+    version="1.7.3",
     py_modules=["ytmd"],
     python_requires=">=3.7",
     install_requires=[
-        "yt-dlp",
+        "yt-dlp[default]",
         "requests",
         "colorama",
     ],
