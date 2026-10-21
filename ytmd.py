@@ -324,7 +324,7 @@ def build_download_command(url):
         "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "0",
         "--force-overwrites",
         "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg",
-        "--postprocessor-args", "FFmpegThumbnailsConvertor:-vf crop=ih:ih",
+        "--postprocessor-args", r"FFmpegThumbnailsConvertor:-vf crop=min(iw\\,ih):min(iw\\,ih)",
         "--parse-metadata", "upload_date:%(date)s",
         "--replace-in-metadata", "date", r"(\d{4})(\d{2})(\d{2})", r"\1-\2-\3",
         "--parse-metadata", "artist:%(artist)s",
