@@ -12,7 +12,7 @@ init()
 REPO_URL = "https://github.com/Eleazar4628/ytmd.git"
 REPO_API_URL = "https://api.github.com/repos/Eleazar4628/ytmd/commits/main"
 VERSION_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_version")
-DEPENDENCY_CHECK_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_dependencies_last_check")
+DEPENDENCY_CHECK_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_dependencies_last_check_v2")
 DEPENDENCY_CHECK_INTERVAL = 60 * 60 * 24
 
 
