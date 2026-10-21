@@ -63,7 +63,7 @@ def check_for_updates_silently():
 
 
 def update_dependencies_if_needed():
-    """Actualiza diariamente las dependencias Python y herramientas instaladas."""
+    """Actualiza e instala diariamente las dependencias Python y herramientas."""
     now = time.time()
     if os.path.exists(DEPENDENCY_CHECK_FILE):
         try:
@@ -80,24 +80,33 @@ def update_dependencies_if_needed():
         check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
 
-    tools_to_update = []
-    if shutil.which("ffmpeg"):
-        tools_to_update.append(("ffmpeg", "Gyan.FFmpeg.Shared", "ffmpeg"))
-    if shutil.which("node"):
-        tools_to_update.append(("node", "OpenJS.NodeJS.LTS", "nodejs"))
+    # Herramientas a asegurar/instalar: (nombre, winget_id, termux_pkg, apt_pkg)
+    tools_ensure = [
+        ("ffmpeg", "Gyan.FFmpeg.Shared", "ffmpeg", "ffmpeg"),
+        ("node", "OpenJS.NodeJS.LTS", "nodejs", "nodejs"),
+    ]
 
-    if os.name == "nt" and shutil.which("winget"):
-        for _tool, package_id, _termux_name in tools_to_update:
+    is_windows = os.name == "nt"
+    is_termux = os.path.exists("/data/data/com.termux/files/usr")
+
+    if is_windows and shutil.which("winget"):
+        for _name, package_id, _tmux, _apt in tools_ensure:
             subprocess.run(
-                ["winget", "upgrade", "--id", package_id, "--exact",
+                ["winget", "install", "--id", package_id, "--exact",
                  "--silent", "--accept-source-agreements",
                  "--accept-package-agreements"],
                 check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
-    elif os.path.exists("/data/data/com.termux/files/usr"):
-        for _tool, _package_id, termux_name in tools_to_update:
+    elif is_termux:
+        for _name, _winget, termux_pkg, _apt in tools_ensure:
             subprocess.run(
-                ["pkg", "upgrade", "-y", termux_name],
+                ["pkg", "install", "-y", termux_pkg],
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+    elif shutil.which("apt"):
+        for _name, _winget, _tmux, apt_pkg in tools_ensure:
+            subprocess.run(
+                ["apt", "install", "-y", apt_pkg],
                 check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
 
@@ -150,25 +159,78 @@ def get_music_folder():
         return "/sdcard/Music" if os.path.exists("/sdcard") else os.path.expanduser("~/storage/music")
 
 
+def _yt_dlp_available():
+    try:
+        import yt_dlp
+        return True
+    except ImportError:
+        return False
+
+
 def check_dependencies():
     missing = []
-    if shutil.which("yt-dlp") is None:
+    if not _yt_dlp_available():
         missing.append("yt-dlp")
     if shutil.which("ffmpeg") is None:
         missing.append("ffmpeg")
     if not missing:
         return
+
     print(f"Falta(n) dependencia(s): {', '.join(missing)}")
-    print("Instalá con:")
-    for dep in missing:
-        if dep == "yt-dlp":
-            print("  pip install -U yt-dlp")
-        else:
-            if os.name == 'nt':
-                print("  winget install ffmpeg")
+
+    is_termux = os.path.exists("/data/data/com.termux/files/usr")
+
+    # Intento de auto-instalación antes de rendirse
+    if "yt-dlp" in missing:
+        print("Instalando yt-dlp vía pip...")
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-U", "yt-dlp"],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+
+    if "ffmpeg" in missing:
+        if os.name == 'nt' and shutil.which("winget"):
+            print("Instalando ffmpeg vía winget...")
+            subprocess.run(
+                ["winget", "install", "--id", "Gyan.FFmpeg.Shared", "--exact",
+                 "--silent", "--accept-source-agreements",
+                 "--accept-package-agreements"],
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+        elif is_termux:
+            print("Instalando ffmpeg vía pkg (Termux)...")
+            subprocess.run(
+                ["pkg", "install", "-y", "ffmpeg"],
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+        elif shutil.which("apt"):
+            print("Instalando ffmpeg vía apt...")
+            subprocess.run(
+                ["apt", "install", "-y", "ffmpeg"],
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+
+    # Re-verificar después del intento de instalación
+    still_missing = []
+    if not _yt_dlp_available():
+        still_missing.append("yt-dlp")
+    if shutil.which("ffmpeg") is None:
+        still_missing.append("ffmpeg")
+
+    if still_missing:
+        print(f"Todavía falta(n): {', '.join(still_missing)}")
+        print("Instalá manualmente con:")
+        for dep in still_missing:
+            if dep == "yt-dlp":
+                print("  pip install -U yt-dlp")
             else:
-                print("  pkg install ffmpeg -y  # Termux")
-    sys.exit(1)
+                if is_termux:
+                    print("  pkg install ffmpeg -y  # Termux")
+                elif os.name == 'nt':
+                    print("  winget install ffmpeg")
+                else:
+                    print("  apt install ffmpeg  # Linux")
+        sys.exit(1)
 
 
 def clean_url(url):
@@ -254,12 +316,15 @@ def build_download_command(url):
         base_path, "%(artist,uploader)s",
         "%(album,playlist_title,Unknown_Album)s", "%(title)s.%(ext)s"
     )
+    # Usar yt-dlp como módulo de Python (sys.executable -m yt_dlp) porque el
+    # ejecutable yt-dlp.exe puede ser un wrapper roto que no encuentra python.exe.
     command = [
-        "yt-dlp", "--ignore-config", "--verbose", "--ignore-errors",
+        sys.executable, "-m", "yt_dlp",
+        "--ignore-config", "--verbose", "--ignore-errors",
         "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "0",
         "--force-overwrites",
         "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg",
-        "--postprocessor-args", "ThumbnailsConvertor:-vf crop=ih:ih",
+        "--postprocessor-args", "FFmpegThumbnailsConvertor:-vf crop=ih:ih",
         "--parse-metadata", "upload_date:%(date)s",
         "--replace-in-metadata", "date", r"(\d{4})(\d{2})(\d{2})", r"\1-\2-\3",
         "--parse-metadata", "artist:%(artist)s",
@@ -331,7 +396,7 @@ def run_download(command, original_url=None):
             save_retry_urls(failed_urls)
         if log_line_count == 0:
             print("yt-dlp terminó sin escribir ninguna línea al log.")
-            print(f"Ejecutable: {shutil.which('yt-dlp') or 'no encontrado'}")
+            print(f"Ejecutable: {sys.executable} -m yt_dlp")
             print("Comando: " + subprocess.list2cmdline(command))
         raise subprocess.CalledProcessError(process.returncode, command)
 
