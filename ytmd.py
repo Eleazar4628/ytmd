@@ -15,6 +15,7 @@ REPO_URL = "https://github.com/Eleazar4628/ytmd.git"
 REPO_API_URL = "https://api.github.com/repos/Eleazar4628/ytmd/commits/main"
 VERSION_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_version")
 RETRY_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_retry.json")
+LAST_LOG_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_last.log")
 DEPENDENCY_CHECK_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_dependencies_last_check_v2")
 DEPENDENCY_CHECK_INTERVAL = 60 * 60 * 24
 
@@ -243,7 +244,7 @@ def build_download_command(url):
         "%(album,playlist_title,Unknown_Album)s", "%(title)s.%(ext)s"
     )
     command = [
-        "yt-dlp", "--verbose",
+        "yt-dlp", "--ignore-config", "--verbose", "--ignore-errors",
         "-f", "ba", "-x", "--audio-format", "mp3", "--audio-quality", "0",
         "--force-overwrites",
         "--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg",
@@ -269,47 +270,58 @@ def build_download_command(url):
 
 
 def run_download(command, original_url=None):
-    """Ejecuta yt-dlp mostrando el log completo y guarda canciones fallidas."""
+    """Ejecuta yt-dlp mostrando y guardando el log, y registra canciones fallidas."""
     output_dirs = []
     failed_urls = load_retry_urls()
     current_url = original_url
     saw_error = False
-    process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, encoding="utf-8", errors="replace", bufsize=1
-    )
-    for line in process.stdout:
-        line = line.rstrip("\r\n")
-        if line.startswith(PATH_MARKER):
-            filepath = line[len(PATH_MARKER):].strip()
-            if filepath:
-                output_dirs.append(os.path.dirname(filepath))
-            if current_url in failed_urls:
-                failed_urls.discard(current_url)
-                save_retry_urls(failed_urls)
-            continue
+    log_line_count = 0
+    print(f"Log completo: {LAST_LOG_FILE}")
+    with open(LAST_LOG_FILE, "w", encoding="utf-8") as log_file:
+        process = subprocess.Popen(
+            command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding="utf-8", errors="replace", bufsize=1
+        )
+        for line in process.stdout:
+            line = line.rstrip("\r\n")
+            log_file.write(line + "\n")
+            log_file.flush()
+            log_line_count += 1
+            if line.startswith(PATH_MARKER):
+                filepath = line[len(PATH_MARKER):].strip()
+                if filepath:
+                    output_dirs.append(os.path.dirname(filepath))
+                if current_url in failed_urls:
+                    failed_urls.discard(current_url)
+                    save_retry_urls(failed_urls)
+                continue
 
-        if line.startswith(RETRY_ITEM_MARKER):
-            current_url = line[len(RETRY_ITEM_MARKER):].strip()
-        else:
-            if "Downloading item " in line:
-                current_url = None
-            match = re.search(r"Extracting URL:\s*(\S+)", line)
-            if match:
-                current_url = match.group(1)
+            if line.startswith(RETRY_ITEM_MARKER):
+                current_url = line[len(RETRY_ITEM_MARKER):].strip()
+            else:
+                if "Downloading item " in line:
+                    current_url = None
+                match = re.search(r"Extracting URL:\s*(\S+)", line)
+                if match:
+                    current_url = match.group(1)
 
-        print(line, flush=True)
-        if re.search(r"\bERROR:", line, re.IGNORECASE):
-            saw_error = True
-            if current_url:
-                failed_urls.add(current_url)
-                save_retry_urls(failed_urls)
+            print(line, flush=True)
+            if re.search(r"\bERROR:", line, re.IGNORECASE):
+                saw_error = True
+                if current_url:
+                    failed_urls.add(current_url)
+                    save_retry_urls(failed_urls)
 
-    process.wait()
+        process.wait()
+
     if process.returncode != 0:
         if original_url and not saw_error:
             failed_urls.add(original_url)
             save_retry_urls(failed_urls)
+        if log_line_count == 0:
+            print("yt-dlp terminó sin escribir ninguna línea al log.")
+            print(f"Ejecutable: {shutil.which('yt-dlp') or 'no encontrado'}")
+            print("Comando: " + subprocess.list2cmdline(command))
         raise subprocess.CalledProcessError(process.returncode, command)
 
     seen = set()
@@ -327,7 +339,7 @@ def run_retry():
         print("No hay canciones pendientes para reintentar.")
         return
 
-    print(f"Reintentando {len(urls)} canción(es)...")
+    print(f"Reintentando {len(urls)} URL(s)...")
     for url in urls:
         print(f"\nReintentando: {url}")
         try:
@@ -339,7 +351,7 @@ def run_retry():
 
     remaining = load_retry_urls()
     if remaining:
-        print(f"Quedan {len(remaining)} canción(es) pendientes. Ejecuta ytmd -retry para volver a intentarlo.")
+        print(f"Quedan {len(remaining)} URL(s) pendientes. Ejecuta ytmd -retry para volver a intentarlo.")
     else:
         print("Todas las canciones pendientes se descargaron correctamente.")
 
@@ -373,7 +385,7 @@ def main():
             open_download_folder(folder)
         remaining = load_retry_urls()
         if remaining:
-            print(f"\n{len(remaining)} canción(es) con error guardadas para reintento. Usa ytmd -retry.")
+            print(f"\n{len(remaining)} URL(s) con error guardadas para reintento. Usa ytmd -retry.")
     except subprocess.CalledProcessError as e:
         print(f"\nyt-dlp terminó con código {e.returncode}. El log completo aparece arriba.")
         remaining = load_retry_urls()
