@@ -72,7 +72,7 @@ def update_dependencies_if_needed():
     # Mantiene al día todas las dependencias declaradas en setup.py y yt-dlp.
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "--upgrade",
-         "yt-dlp", "requests", "colorama"],
+         "yt-dlp[default]", "requests", "colorama"],
         check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
 
@@ -280,6 +280,8 @@ def main():
         "-o", output_template,
         url
     ]
+    if shutil.which("node"):
+        command[-1:-1] = ["--js-runtimes", "node"]
 
     try:
         print("\nIniciando descarga...\n")
