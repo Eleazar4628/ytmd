@@ -12,8 +12,8 @@ init()
 REPO_URL = "https://github.com/Eleazar4628/ytmd.git"
 REPO_API_URL = "https://api.github.com/repos/Eleazar4628/ytmd/commits/main"
 VERSION_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_version")
-YTDLP_CHECK_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_ytdlp_last_check")
-YTDLP_CHECK_INTERVAL = 60 * 60 * 24
+DEPENDENCY_CHECK_FILE = os.path.join(os.path.expanduser("~"), ".ytmd_dependencies_last_check")
+DEPENDENCY_CHECK_INTERVAL = 60 * 60 * 24
 
 
 def get_latest_sha(timeout=5, retries=2, silent=False):
@@ -58,24 +58,49 @@ def check_for_updates_silently():
                 print("Nueva versión disponible. Usa 'ytmd --upgrade' para actualizar.")
 
 
-def update_yt_dlp_if_needed():
+def update_dependencies_if_needed():
+    """Actualiza diariamente las dependencias Python y herramientas instaladas."""
     now = time.time()
-    if os.path.exists(YTDLP_CHECK_FILE):
+    if os.path.exists(DEPENDENCY_CHECK_FILE):
         try:
-            last_check = float(open(YTDLP_CHECK_FILE).read().strip())
-            if now - last_check < YTDLP_CHECK_INTERVAL:
+            last_check = float(open(DEPENDENCY_CHECK_FILE).read().strip())
+            if now - last_check < DEPENDENCY_CHECK_INTERVAL:
                 return
         except (ValueError, OSError):
             pass
 
+    # Mantiene al día todas las dependencias declaradas en setup.py y yt-dlp.
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--upgrade",
+         "yt-dlp", "requests", "colorama"],
+        check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
+
+    tools_to_update = []
+    if shutil.which("ffmpeg"):
+        tools_to_update.append(("ffmpeg", "Gyan.FFmpeg.Shared", "ffmpeg"))
+    if shutil.which("node"):
+        tools_to_update.append(("node", "OpenJS.NodeJS.LTS", "nodejs"))
+
+    if os.name == "nt" and shutil.which("winget"):
+        for _tool, package_id, _termux_name in tools_to_update:
+            subprocess.run(
+                ["winget", "upgrade", "--id", package_id, "--exact",
+                 "--silent", "--accept-source-agreements",
+                 "--accept-package-agreements"],
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+    elif os.path.exists("/data/data/com.termux/files/usr"):
+        for _tool, _package_id, termux_name in tools_to_update:
+            subprocess.run(
+                ["pkg", "upgrade", "-y", termux_name],
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+
     try:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-U", "yt-dlp"],
-            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-        with open(YTDLP_CHECK_FILE, "w") as f:
+        with open(DEPENDENCY_CHECK_FILE, "w") as f:
             f.write(str(now))
-    except subprocess.CalledProcessError:
+    except OSError:
         pass
 
 
@@ -230,7 +255,7 @@ def main():
         return
 
     check_for_updates_silently()
-    update_yt_dlp_if_needed()
+    update_dependencies_if_needed()
     check_dependencies()
 
     url = to_music_youtube(clean_url(sys.argv[1]))
