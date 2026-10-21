@@ -220,11 +220,22 @@ def open_download_folder(path):
         pass
 
 
+def is_playlist_url(url):
+    query = parse_qs(urlparse(url).query)
+    return "list" in query and "v" not in query
+
+
 def load_retry_urls():
     try:
         with open(RETRY_FILE, "r", encoding="utf-8") as f:
             urls = json.load(f)
-        return set(url for url in urls if isinstance(url, str) and url)
+        valid_urls = {
+            url for url in urls
+            if isinstance(url, str) and url and not is_playlist_url(url)
+        }
+        if valid_urls != set(urls):
+            save_retry_urls(valid_urls)
+        return valid_urls
     except (OSError, ValueError, TypeError):
         return set()
 
@@ -315,7 +326,7 @@ def run_download(command, original_url=None):
         process.wait()
 
     if process.returncode != 0:
-        if original_url and not saw_error:
+        if original_url and not saw_error and not is_playlist_url(original_url):
             failed_urls.add(original_url)
             save_retry_urls(failed_urls)
         if log_line_count == 0:
