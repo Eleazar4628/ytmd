@@ -250,7 +250,6 @@ def main():
         "--parse-metadata", "artist:%(meta_album_artist)s",
         "--parse-metadata", "playlist_index:%(track_number)s",
         "--parse-metadata", "title:%(title)s",
-        "--parse-metadata", "original_url:%(meta_original_url)s",
         "--replace-in-metadata", "title", r"(?i)\s*([\(\[][^\]\)]*(video|audio|lyrics|official|video oficial|hd)[^\]\)]*[\)\]])", "",
         "--parse-metadata", ":(?P<meta_comment>)",
         "--print", f"after_move:{PATH_MARKER}%(filepath)s",
